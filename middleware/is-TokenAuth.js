@@ -1,4 +1,5 @@
 const jwt = require('jsonwebtoken');
+const config = require('config');
 
 module.exports = (req, res, next) => {
   const authHeader = req.get('Authorization');
@@ -10,7 +11,7 @@ module.exports = (req, res, next) => {
   const token = authHeader.split(' ')[1];
   let decodedToken;
   try {
-    decodedToken = jwt.verify(token, 'mysecretsupersecret');
+    decodedToken = jwt.verify(token, config.get("App.jwtKey"));
   } catch (err) {
     error= new Error('Invalid Token!');
     error.statusCode = 500;

@@ -3,6 +3,8 @@ const signupController = require('../controllers/signup');
 
 const router= express.Router();
 
+router.get('/',signupController.noPagePath);
+
 router.post('/signUp',signupController.signUp);
 
 router.get('/emailVerifyreq/:id',signupController.emailVerify);

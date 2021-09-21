@@ -1,45 +1,76 @@
 const upload= require('../helper/helperFunc');
 const User= require('../model/user');
 const security= require('../security/security');
+const fs= require('fs');
 const PasswordReset= require('../model/UserPasswordReset');
 const jwt= require('jsonwebtoken');
-const nodemailer= require('nodemailer');
-const sendgridTransport= require('nodemailer-sendgrid-transport');
+const Joi= require('joi')
+const sendEmail= require('../helper/emailSender'); 
 const bcrypt= require('bcryptjs');
 const ejs= require('ejs');
 const path= require('path');
-const validation= require('../model/userValidator');
 const Category = require('../model/category');
 const dataExists= require('../helper/dataExistenceChk');
 const helperfunc= require('../helper/dbUpdate');
 const createOtp= require('../security/otp');
+const config= require('config');
 
-
-
-const transporter= nodemailer.createTransport(sendgridTransport({
-    auth:{
-      api_key: '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'
-    }
-  }))
-
-
-
-
+exports.noPagePath= (req,res,next) => {
+    res.status(200).send("<h1>Node Server Running here</h1><img src='https://www.freeiconspng.com/uploads/virtual-server-icon-7.png' width='480' height='600'>");
+}
+///done with validation
 exports.signUp =  async (req,res,next) => {
-        await upload(req,res,'profile',async (data)=>{    
+        await upload(req,res,config.get("App.imageSavingFolder"),async (data)=>{    
             try{
+                const schema = Joi.object({
+                    firstname: Joi.string()
+                        .pattern(/^[a-z]+$/i)
+                        .min(3)
+                        .max(10)
+                        .required()
+                        .error(new Error('Firstname is required and Cannot have Non-Characters!')),
+                    
+                    lastname: Joi.string()
+                        .pattern(/^[a-z]+$/i)
+                        .min(3)
+                        .max(10)
+                        .required()
+                        .error(new Error('Lastname is required and Cannot have Non-Characters!')),
+                    
+                    phone: Joi.number()
+                        .integer()
+                        .required()
+                        .error(new Error('Valid number is required!')),
+                        
+                    gender:Joi.string()
+                        .required()
+                        .error(new Error('Valid Gender is required!')),
+                
+                    email: Joi.string()
+                        .email({ minDomainSegments: 2, tlds: { allow: ['com', 'net',] } })
+                        .required()
+                        .error(new Error('Valid Email is required!')),
+                
+                    password: Joi.string()
+                        .alphanum()
+                        .min(8)
+                        .max(10)
+                        .required()
+                        .error(new Error('Password must be 8 characters long and must be alphaNumeric!!!')),
+                
+                    categoryId: Joi.number()
+                        .integer()
+                        .min(1)
+                        .max(7)
+                        .required()
+                        .error(new Error('Valid CategoryId is required!')),
+                })
+                userValidated= await schema.validateAsync(data.body)
                 const userMailCheckout= await User.findOne({where:{email:data.body.email}})
-                // dataExists.checkExistence(userMailCheckout,"Email Already Exists!!!!!");
-                userValidated= await validation.validateAsync(data.body)
-                console.log(userValidated);
-                if(userValidated.error){
-                    let error= new Error(userValidated.error.details);
-                    throw error;
-                }
                 if(userMailCheckout){
-                    let error = new Error('Email Already Exists!!');
-                    throw error;
+                    fs.unlinkSync(data.files[0].path);
                 }
+                dataExists.checkExistence(!userMailCheckout,"Email Already Exists!!!!!");
                 await User.create({
                     firstname:data.body.firstname,
                     lastname:data.body.lastname,
@@ -55,13 +86,8 @@ exports.signUp =  async (req,res,next) => {
                         firstname:result.firstname,
                         lastname:result.lastname,
                         id:result.id
-                    })                                         
-                    transporter.sendMail({
-                        to:result.email,
-                        from:'2018cscloudmoksh6777@poornima.edu.in',
-                        subject:'sucessfully signedUp!',
-                        html:data
-                    });
+                    })         
+                    sendEmail(result.email,'Successfully SignedUp!',data);                                
                     res.status(200).json({"done":"yes, Now check your mail for verification",status:true});
                 })
                 .catch((err)=>{
@@ -73,12 +99,12 @@ exports.signUp =  async (req,res,next) => {
                 next (err);
             }     
         })
-    }
+}
 
-exports.emailVerify= ((req,res,next)=>{
+exports.emailVerify= (req,res,next)=>{
     User.findByPk(req.params.id)
     .then(async (user)=>{                                                                                     
-        dataExists.alreadyVerified(user,"link is invalid or user is already verified");
+        dataExists.checkAlreadyVerified(user,"link is invalid or user is already verified");
         user.verified= "1";
         await user.save()
          .then(()=>{
@@ -92,22 +118,36 @@ exports.emailVerify= ((req,res,next)=>{
         console.log(err);
         next(err);
     })
-})
+}
 
-
+//validation done here
 exports.postlogin=async (req,res,next) => {
     try{
-        let user=await User.findAll({where:{email:req.body.email},include:Category,attributes:{exclude:['createdAt','updatedAt']}})
-        dataExists.dataFound(user);
-        console.log('usersiisisiisisis',user,user[0].dataValues.category);
-        dataExists.checkExistence(user[0].verified,"Mail not verified");
-        const passwordCheck= bcrypt.compareSync(req.body.password, user[0].password);
+        const schema = Joi.object({
+            email: Joi.string()
+                .email({ minDomainSegments: 2, tlds: { allow: ['com', 'net',] } })
+                .required()
+                .error(new Error('Valid Email is required!')),
+        
+            password: Joi.string()
+                .alphanum()
+                .min(8)
+                .max(10)
+                .required()
+                .error(new Error('Password must be 8 characters long and must be alphaNumeric!!!')),
+        })
+        userValidated= await schema.validateAsync({email:req.body.email, password:req.body.password});
+        let user=await User.findOne({where:{email:req.body.email},include:Category,attributes:{exclude:['createdAt','updatedAt']}})
+        dataExists.checkExistence(user,'Mail not found!!!');
+        // console.log('usersiisisiisisis',user,user[0].dataValues.category);
+        dataExists.checkExistence(user.verified,"Mail not verified");
+        const passwordCheck= bcrypt.compareSync(req.body.password, user.password);
         dataExists.checkExistence(passwordCheck,"Incorrect Password!!!");
         jwtToken= jwt.sign({
-            id:user[0].id
-        },'mysecretsupersecret');
-        await helperfunc.update(user[0].id,jwtToken);
-        user= user[0].dataValues;
+            id:user.id
+        },config.get("App.jwtKey"));
+        await helperfunc.update(user.id,jwtToken);
+        // user= user.dataValues;
         delete user.verified;
         delete user.password;
         delete user.category.dataValues.createdAt;
@@ -135,28 +175,29 @@ exports.Logout= async (req,res,next)=>{
     }
 }
 
-
+//validation done here
 exports.forgotPassword= async(req,res,next)=>{
     try{
-        let user=await User.findAll({where:{email:req.body.email}})
-        dataExists.dataFound(user,"Mail not Found!");
+        const schema = Joi.object({
+            email: Joi.string()
+                .email({ minDomainSegments: 2, tlds: { allow: ['com', 'net',] } })
+                .required()
+                .error(new Error('Valid Email is required!'))
+        })
+        userValidated= await schema.validateAsync({email:req.body.email});
+        let user=await User.findOne({where:{email:req.body.email}})
+        dataExists.checkExistence(user,"Mail not Found!");
         const resetingPassword= await PasswordReset.create({
             otpValue:await createOtp(),
-            expiresAt:Date.now()+300000,
-            userId:user[0].id                    
+            expiresAt:Date.now()+config.get("App.otpTimer"),
+            userId:user.id                    
         });
-        console.log('resettttifdfksdlpass',resetingPassword);
         const data= await ejs.renderFile(path.join(__dirname, '..','templates/','otpMail.ejs'),{
-            firstname:user[0].firstname,
-            lastname:user[0].lastname,
+            firstname:user.firstname,
+            lastname:user.lastname,
             otp:resetingPassword.otpValue
-        })                                         
-        transporter.sendMail({
-            to:user[0].email,
-            from:'2018cscloudmoksh6777@poornima.edu.in',
-            subject:'Password Reset OTP!',
-            html:data
-        });
+        })
+        sendEmail(user.email,'Password Reset OTP!!!',data);                                         
         res.status(200).json({done:"Check your Email for Otp"});
     }
     catch(err){
@@ -164,41 +205,61 @@ exports.forgotPassword= async(req,res,next)=>{
     }
 }
 
-
+//validation done here
 exports.checkOtp= async (req,res,next) => {
     try{
-        dataExists.checkExistence(req.body.otp,'please enter OTP');
-        let user=await PasswordReset.findAll({where:{otpValue:req.body.otp}})
-        dataExists.dataFound(user,'Invalid OTP!!!');
-        console.log(user[0].otpValue);
-        if(user[0].otpValue === req.body.otp){
-            if(Date.now() < user[0].expiresAt ){
-                res.status(200).json({"done":"Successfully Verified OTP now Go to Update Password to Update it."});
+        const schema = Joi.object({
+            otp:Joi.number()
+                .integer()
+                .min(1000)
+                .max(9999)
+                .required()
+                .error(new Error('A 4 digit OTP is required!!!'))
+        })
+        userValidated= await schema.validateAsync(req.body);
+        let user=await PasswordReset.findOne({where:{otpValue:req.body.otp}})
+        dataExists.checkExistence(user,'Invalid OTP!!!');
+        if(user.otpValue === req.body.otp){
+            if(Date.now() < user.expiresAt ){
+                return res.status(200).json({"done":"Successfully Verified OTP now Go to Update Password to Update it."});
             }
             const error = new Error('OTP has been Expired!!!');
             throw error;
         }
         const error= new Error('Incorrect Otp!!!');
         throw error;
-
     }
     catch(err){
         next(err);
     }
 }
 
+//validation done here
 exports.updatingPassword = async (req,res,next) => {
     try{
-        dataExists.checkExistence(req.body.otp,'please enter OTP');
-        dataExists.checkExistence(req.body.password,'enter a password please');
-        let user=await PasswordReset.findAll({where:{otpValue:req.body.otp}})
-        dataExists.dataFound(user,'Invalid OTP!!!');
-        if(user[0].otpValue === req.body.otp){
-            await PasswordReset.destroy({where:{id:user[0].id}});
-            const gettingUser= await User.findByPk(user[0].userId);
+        const schema = Joi.object({
+            otp:Joi.number()
+                .integer()
+                .min(1000)
+                .max(9999)
+                .required()
+                .error(new Error('A 4 digit OTP is required!!!')),
+            password: Joi.string()
+                .alphanum()
+                .min(8)
+                .max(10)
+                .required()
+                .error(new Error('Password must be 8 characters long and must be alphaNumeric!!!')),
+        })
+        userValidated= await schema.validateAsync(req.body);
+        let user=await PasswordReset.findOne({where:{otpValue:req.body.otp}})
+        dataExists.checkExistence(user,'Invalid OTP!!!');
+        if(user.otpValue === req.body.otp){
+            await PasswordReset.destroy({where:{id:user.id}});
+            const gettingUser= await User.findByPk(user.userId);
             gettingUser.password= req.body.password;
-            gettingUser.save();
-            res.status(200).json({"done":"Successfully updated password"});
+            await gettingUser.save();
+            return res.status(200).json({"done":"Successfully updated password"});
         }
         const error= new Error('Incorrect Otp!!!');
         throw error;

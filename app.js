@@ -4,6 +4,7 @@ const sequelize= require('./database/db');
 const Users= require('./model/user');
 const signupLoginRoute= require('./routes/signupLoginRoute');
 const logintoDashboardRoute= require('./routes/afterLoginRoute');
+const config = require('config');
 
 
 const app= express();
@@ -32,7 +33,7 @@ app.use((error, req, res, next) => {
 sequelize
     .sync()
     .then(() => {
-        app.listen(8080,(err)=>{
+        app.listen(config.get("App.port"),(err)=>{
             if(!err){
                 console.log('server started on port 8080');
             }

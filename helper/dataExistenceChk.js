@@ -16,7 +16,7 @@ exports.checkExistence= (data,errormessage) => {                                
     return
 }                  
 
-exports.alreadyVerified= (data,errormessage) => {                       //FOR VERIFICATION 
+exports.checkAlreadyVerified= (data,errormessage) => {                       //FOR VERIFICATION 
     if(!data){
         const error= new Error(errormessage);
         console.log('infirst');
