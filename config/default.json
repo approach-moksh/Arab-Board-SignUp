@@ -5,7 +5,7 @@
         "port":8080,
         "nodemailerApiKey":"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",
         "otpTimer":300000,
-        "imageSavingFolder":"profile"         
+        "assets":"../assets"         
     },
     "Db":{
         "host":"localhost",

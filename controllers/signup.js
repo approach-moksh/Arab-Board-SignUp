@@ -20,7 +20,7 @@ exports.noPagePath= (req,res,next) => {
 }
 ///done with validation
 exports.signUp =  async (req,res,next) => {
-        await upload(req,res,config.get("App.imageSavingFolder"),async (data)=>{    
+        await upload(req,res,'profile',async (data)=>{    
             try{
                 const schema = Joi.object({
                     firstname: Joi.string()

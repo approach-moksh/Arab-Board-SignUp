@@ -1,10 +1,11 @@
 const multer= require('multer');
 const path= require('path');
+const config= require('config');
 
 async function upload(req,res,patharea,calback){
     const fileStorageEngine = multer.diskStorage({
         destination:(req,file,cb) => {
-            cb(null,path.join(__dirname,'../assets/',patharea));
+            cb(null,path.join(__dirname,config.get("App.assets"),patharea));
         },
         filename: (req,file,cb) => {
             cb(null,new Date().toISOString().replace(/:/g,'-')+'--'+file.originalname);
